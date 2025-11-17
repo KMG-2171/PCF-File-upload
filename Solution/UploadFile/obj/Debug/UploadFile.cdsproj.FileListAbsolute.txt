@@ -1,0 +1,2 @@
+C:\Users\Aateefuddin\Documents\mahfooz\Solution\UploadFile\obj\Debug\UploadFile.cdsproj.AssemblyReference.cache
+C:\Users\Aateefuddin\Documents\mahfooz\Solution\UploadFile\obj\Debug\UploadFile.cdsproj.CoreCompileInputs.cache
