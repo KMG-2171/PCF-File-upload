@@ -1,4 +1,4 @@
-# Deployment Guide
+# Deployment Guide (OneLake-only)
 
 This guide covers the complete deployment process for the modernized PCF File Upload Control.
 
@@ -24,21 +24,12 @@ npm run build
 ls -la out/controls/
 ```
 
-### 2. Deploy Azure Function (Recommended)
+### 2. Configure in Power Apps
 
-```bash
-# Navigate to Azure Function directory
-cd azure-function
-
-# Install dependencies
-npm install
-
-# Deploy to Azure
-func azure functionapp publish YourFunctionAppName
-
-# Verify deployment
-curl https://YourFunctionAppName.azurewebsites.net/api/GenerateSasToken?blobName=test.txt
-```
+1. Add the control to your app
+2. Set properties:
+   - `OneLake Folder URL`: `https://onelake.dfs.fabric.microsoft.com/<workspace>/<lakehouse>/Files/<folder>`
+   - `AAD Access Token`: short-lived bearer token (scope `https://storage.azure.com/.default`), paste raw token only
 
 ### 3. Import to Power Apps
 
@@ -72,18 +63,9 @@ az storage account show-connection-string \
   --query connectionString
 ```
 
-### Azure Function Configuration
-
-```bash
-# Set application settings
-az functionapp config appsettings set \
-  --name YourFunctionAppName \
-  --resource-group MyResourceGroup \
-  --settings \
-    "AzureStorageConnectionString=your_connection_string" \
-    "ContainerName=uploads" \
-    "MaxFileSizeMB=100"
-```
+### Notes on Tokens
+- Generate tokens using your preferred secured approach (e.g., service principal)
+- Use short lifetimes and rotate regularly
 
 ### CORS Configuration
 
@@ -126,24 +108,10 @@ az storage cors add \
 
 ## 🧩 OneLake (Microsoft Fabric) Configuration
 
-### 1. Azure Function for AAD Token
-- Add `GenerateOneLakeToken` to your function app (provided in `azure-function/GenerateOneLakeToken.cs`).
-- Configure app settings:
-  - `TenantId` = your AAD tenant ID
-  - `ClientId` = service principal (app registration) client ID
-  - `ClientSecret` = service principal secret
-- The function returns a bearer token for scope `https://storage.azure.com/.default`.
-
-### 2. PCF Properties
+### PCF Properties
 - Set in the control:
-  - `uploadAuthMode`: `OneLakeAAD`
-  - `oneLakeWorkspaceId`: `<fabric-workspace-guid>`
-  - `oneLakeLakehouseId`: `<fabric-lakehouse-guid>`
-  - `oneLakeBasePath`: `Files` (recommended)
-  - `oneLakeUserSubPath`: optional per-user folder (e.g., `users/{username}`)
-  - `oneLakeChunkSizeMB`: `8` (recommended)
-  - `maxFileSizeMB`: `1024` (1GB)
-  - `aadTokenRequestUrl`: `https://<functionapp>.azurewebsites.net/api/GenerateOneLakeToken`
+  - `OneLake Folder URL`
+  - `AAD Access Token`
 
 ### 3. OneLake Direct Token (Dev-only) Configuration
 - Use when you already have a DFS folder URL and a Bearer token:

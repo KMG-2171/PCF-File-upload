@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <manifest>
-  <control namespace="pcfFile" constructor="customFileUpload" version="0.0.15" display-name-key="PCF File Upload " description-key="PCF" control-type="standard">
+  <control namespace="pcfFile" constructor="customFileUpload" version="0.1.3" display-name-key="PCF OneLake" description-key="PCF" control-type="standard">
     <!--external-service-usage node declares whether this 3rd party PCF control is using external service or not, if yes, this control will be considered as premium and please also add the external domain it is using.
     If it is not using any external service, please set the enabled="false" and DO NOT add any domain below. The "enabled" will be false by default.
     Example1:
@@ -12,55 +12,12 @@
       </external-service-usage>
     -->
     <external-service-usage enabled="true">
-      <domain>*.blob.core.windows.net</domain>
       <domain>onelake.dfs.fabric.microsoft.com</domain>
     </external-service-usage>
     <!-- property node identifies a specific, configurable piece of data that the control expects from CDS -->
-    <!-- Secure Azure Storage Configuration -->
-    <property name="storageAccountName" display-name-key="Storage Account Name" description-key="Azure Storage Account Name (e.g., mystorageaccount)" of-type="SingleLine.Text" usage="input" required="true" />
-    <property name="containerName" display-name-key="Container Name" description-key="Azure Blob Container Name" of-type="SingleLine.Text" usage="input" required="true" />
-    <!-- Authentication Configuration -->
-    <property name="uploadAuthMode" display-name-key="Upload Authentication Mode" description-key="How to authenticate with Azure Blob Storage or OneLake" of-type="Enum" usage="input" required="true" default-value="SASFromServer">
-      <value name="SASFromServer" display-name-key="SAS Token from Server (Recommended)">SASFromServer</value>
-      <value name="DirectSASToken" display-name-key="Direct SAS Token">DirectSASToken</value>
-      <value name="ServerProxyUpload" display-name-key="Server Proxy Upload">ServerProxyUpload</value>
-      <value name="OneLakeAAD" display-name-key="OneLake (AAD Token)">OneLakeAAD</value>
-      <value name="OneLakeDirectToken" display-name-key="OneLake (Direct Bearer Token - Dev Only)">OneLakeDirectToken</value>
-    </property>
-    <property name="sasRequestUrl" display-name-key="SAS Request URL" description-key="Server endpoint to request SAS tokens (for SASFromServer mode). Example: https://api.example.com/generate-sas" of-type="SingleLine.Text" usage="input" required="false" />
-    <property name="sasToken" display-name-key="SAS Token" description-key="Direct SAS Token for Azure Storage (for DirectSASToken mode). WARNING: Use short-lived tokens only" of-type="Multiple" usage="input" required="false" />
-    <property name="uploadEndpoint" display-name-key="Upload Endpoint" description-key="Server endpoint for proxy uploads (for ServerProxyUpload mode)" of-type="SingleLine.Text" usage="input" required="false" />
-    <!-- OneLake (ADLS Gen2 DFS) Configuration -->
-    <property name="oneLakeWorkspaceId" display-name-key="OneLake Workspace ID" description-key="Microsoft Fabric Workspace ID (GUID)" of-type="SingleLine.Text" usage="input" required="false" />
-    <property name="oneLakeLakehouseId" display-name-key="OneLake Lakehouse ID" description-key="Microsoft Fabric Lakehouse ID (GUID)" of-type="SingleLine.Text" usage="input" required="false" />
-    <property name="oneLakeBasePath" display-name-key="OneLake Base Path" description-key="Base path inside the Lakehouse (e.g., Files)" of-type="SingleLine.Text" usage="input" required="false" default-value="Files" />
-    <property name="oneLakeUserSubPath" display-name-key="OneLake User Sub-Path" description-key="Optional user-specific sub-path (can be bound). Leave blank to derive from current user." of-type="SingleLine.Text" usage="input" required="false" />
-    <property name="aadTokenRequestUrl" display-name-key="AAD Token Request URL" description-key="Server endpoint to obtain a short-lived AAD access token for scope https://storage.azure.com/.default" of-type="SingleLine.Text" usage="input" required="false" />
-    <property name="oneLakeChunkSizeMB" display-name-key="OneLake Chunk Size (MB)" description-key="Chunk size for OneLake DFS append operations" of-type="Whole.None" usage="input" required="false" default-value="8" />
-    <!-- OneLake Direct Token (Dev) -->
-    <property name="oneLakeFolderUrl" display-name-key="(Direct) OneLake Folder URL" description-key="(OneLakeDirectToken only) DFS folder URL, e.g. https://onelake.dfs.fabric.microsoft.com/{workspaceId}/{lakehouseId}/Files/test_powerapps" of-type="SingleLine.Text" usage="input" required="false" />
-    <property name="aadAccessToken" display-name-key="(Direct) AAD Access Token" description-key="(OneLakeDirectToken only) Bearer token for scope https://storage.azure.com/.default (DEV ONLY)" of-type="Multiple" usage="input" required="false" />
-    <!-- File Upload Configuration -->
-    <property name="acceptedFileTypes" display-name-key="Accepted File Types" description-key="Select the file types that can be uploaded" of-type="Enum" usage="input" required="false" default-value="All">
-      <value name="PDF" display-name-key="PDF Files">PDF</value>
-      <value name="CSV" display-name-key="CSV Files">CSV</value>
-      <value name="Word" display-name-key="Word Documents">Word</value>
-      <value name="Excel" display-name-key="Excel Spreadsheets">Excel</value>
-      <value name="PowerPoint" display-name-key="PowerPoint Presentations">PowerPoint</value>
-      <value name="Image" display-name-key="Image Files">Image</value>
-      <value name="Text" display-name-key="Text Files">Text</value>
-      <value name="All" display-name-key="All Files">All</value>
-    </property>
-    <property name="maxFileSizeMB" display-name-key="Max File Size (MB)" description-key="Maximum file size allowed for upload in megabytes" of-type="Whole.None" usage="input" required="false" default-value="100" />
-    <property name="enableMultiple" display-name-key="Enable Multiple Files" description-key="Allow uploading multiple files at once" of-type="TwoOptions" usage="input" required="false" default-value="false" />
-    <property name="maxFileCount" display-name-key="Max File Count" description-key="Maximum number of files allowed when multiple upload is enabled" of-type="Whole.None" usage="input" required="false" default-value="10" />
-    <property name="enableChunkedUpload" display-name-key="Enable Chunked Upload" description-key="Enable chunked upload for large files (&gt;50MB)" of-type="TwoOptions" usage="input" required="false" default-value="false" />
-    <property name="chunkSizeMB" display-name-key="Chunk Size (MB)" description-key="Size of each chunk for chunked uploads" of-type="Whole.None" usage="input" required="false" default-value="10" />
-    <!-- Metadata Configuration -->
-    <property name="enableMetadata" display-name-key="Enable Metadata" description-key="Enable metadata collection for uploaded files" of-type="TwoOptions" usage="input" required="false" default-value="true" />
-    <property name="userNameProperty" display-name-key="User Name Property" description-key="Metadata property name for user information" of-type="SingleLine.Text" usage="input" required="false" default-value="UploadedBy" />
-    <property name="timestampProperty" display-name-key="Timestamp Property" description-key="Metadata property name for upload timestamp" of-type="SingleLine.Text" usage="input" required="false" default-value="UploadedAt" />
-    <property name="userEmailProperty" display-name-key="User Email Property" description-key="Metadata property name for user email" of-type="SingleLine.Text" usage="input" required="false" default-value="EmailID" />
+    <property name="oneLakeFolderUrl" display-name-key="OneLake Folder URL" description-key="DFS folder URL, e.g. https://onelake.dfs.fabric.microsoft.com/{workspaceId}/{lakehouseId}/Files/path" of-type="SingleLine.Text" usage="input" required="true" />
+    <property name="aadAccessToken" display-name-key="AAD Access Token" description-key="Bearer token for scope https://storage.azure.com/.default" of-type="Multiple" usage="input" required="true" />
+    <property name="acceptedFileTypes" display-name-key="Accepted File Types" description-key="All|Images|Documents|Videos|Audios|Custom" of-type="SingleLine.Text" usage="input" required="false" />
     <!--
       Property node's of-type attribute can be of-type-group attribute.
       Example:

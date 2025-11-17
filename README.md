@@ -1,6 +1,6 @@
 # Modern PCF File Upload Control
 
-A comprehensive, secure, and feature-rich Power Apps Component Framework (PCF) control for file uploads to Azure Blob Storage with modern UI, drag-and-drop support, and enterprise-grade security.
+Minimal OneLake-only PCF control for uploading CSV files to Microsoft Fabric OneLake (ADLS Gen2 DFS) using a provided folder URL and AAD bearer token. Keeps original filename, performs a single append (no chunking), and shows real progress.
 
 ## ✨ Features
 
@@ -43,13 +43,12 @@ A comprehensive, secure, and feature-rich Power Apps Component Framework (PCF) c
 - **Chunked upload** configuration
 - **Authentication mode** selection
 
-## 🚀 Quick Start
+## 🚀 Quick Start (OneLake-only)
 
 ### 1. Prerequisites
 - Power Apps Component Framework CLI
-- Azure Storage Account
-- Azure Function (for SAS token generation - recommended)
 - Node.js 16+ and npm
+- OneLake DFS folder URL and a short-lived AAD access token (scope `https://storage.azure.com/.default`)
 
 ### 2. Install Dependencies
 ```bash
@@ -61,53 +60,24 @@ npm install
 npm run build
 ```
 
-### 4. Deploy Azure Function (Optional but Recommended)
-```bash
-cd azure-function
-func azure functionapp publish YourFunctionAppName
-```
-
-### 5. Configure in Power Apps
+### 4. Configure in Power Apps
 1. Import the solution containing the PCF control
 2. Add the control to a form or canvas app
 3. Configure the required properties:
-   - **Storage Account Name**: Your Azure Storage account name
-   - **Container Name**: Target blob container
-   - **Upload Auth Mode**: `SASFromServer` (recommended)
-   - **SAS Request URL**: Your Azure Function endpoint
+   - **OneLake Folder URL**: e.g. `https://onelake.dfs.fabric.microsoft.com/{workspaceId}/{lakehouseId}/Files/myfolder`
+   - **AAD Access Token**: bearer token string (no `Bearer ` prefix)
 
 ## 📋 Configuration Guide
 
-### Authentication Modes
-
-#### 1. SAS from Server (Recommended) 🛡️
-```
-Upload Auth Mode: SASFromServer
-SAS Request URL: https://your-function-app.azurewebsites.net/api/GenerateSasToken
-```
-
-#### 2. Direct SAS Token (Development Only)
-```
-Upload Auth Mode: DirectSASToken
-SAS Token: sv=2023-11-03&ss=b&srt=sco&sp=cw&se=2024-01-01T00:00:00Z&...
-```
-
-#### 3. Server Proxy Upload
-```
-Upload Auth Mode: ServerProxyUpload
-Upload Endpoint: https://your-api.com/upload
-```
+### OneLake-only Behavior
+- Files must be CSV (`.csv` or `text/csv`)
+- Original filename is preserved (URL-encoded only)
+- Single append (no chunking) with progress
+- Max file size: ~1GB
 
 ### File Configuration
 
-```
-Accepted File Types: PDF, Image, Text
-Max File Size (MB): 100
-Enable Multiple Files: Yes
-Max File Count: 10
-Enable Chunked Upload: Yes
-Chunk Size (MB): 10
-```
+Only CSV files are allowed. Multiple file selection is supported. Max ~1GB per file.
 
 ### Metadata Configuration
 
@@ -186,31 +156,10 @@ npm run clean
 - **Async/await** for readable asynchronous code
 - **Error boundaries** for graceful error handling
 
-## 📁 Azure Function Setup
-
-### 1. Create Azure Function
-```bash
-func init FileUploadSasGenerator --dotnet
-func new --name GenerateSasToken --template "Http trigger"
-```
-
-### 2. Configure Settings
-```json
-{
-  "IsEncrypted": false,
-  "Values": {
-    "AzureStorageConnectionString": "YourConnectionString",
-    "ContainerName": "uploads",
-    "MaxFileSizeMB": "100",
-    "MaxFileCount": "10"
-  }
-}
-```
-
-### 3. Deploy
-```bash
-func azure functionapp publish YourFunctionAppName
-```
+## 📁 OneLake Setup
+Provide:
+- OneLake DFS folder URL
+- AAD Access Token (scope `https://storage.azure.com/.default`)
 
 ### OneLake Token Function
 Add a function that returns a short‑lived AAD access token for scope `https://storage.azure.com/.default`:

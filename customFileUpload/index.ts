@@ -54,25 +54,13 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
     private _boundCancelAllHandler: () => void;
     private _boundKeyDownHandler: (e: KeyboardEvent) => void;
 
-    // Configuration
+    // Minimal configuration
     private _maxFileSize: number;
     private _maxFileCount: number;
     private _enableMultiple: boolean;
-    private _enableChunkedUpload: boolean;
-    private _chunkSize: number;
     private _acceptedTypes: string[];
 
-    // File type mappings
-    private _fileTypeMap: Record<string, string[]> = {
-        "PDF": [".pdf", "application/pdf"],
-        "CSV": [".csv", "text/csv", "application/csv"],
-        "Word": [".doc", ".docx", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
-        "Excel": [".xls", ".xlsx", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
-        "PowerPoint": [".ppt", ".pptx", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
-        "Image": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", "image/jpeg", "image/png", "image/gif", "image/bmp", "image/webp"],
-        "Text": [".txt", "text/plain"],
-        "All": ["*"]
-    };
+   
 
     // File type icons
     private _fileIcons: Record<string, string> = {
@@ -138,14 +126,11 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
      * Initialize configuration from manifest properties
      */
     private initializeConfiguration(): void {
-        this._maxFileSize = (this._context.parameters.maxFileSizeMB.raw || 100) * 1024 * 1024; // Convert MB to bytes
-        this._maxFileCount = this._context.parameters.maxFileCount.raw || 10;
-        this._enableMultiple = this._context.parameters.enableMultiple.raw || false;
-        this._enableChunkedUpload = this._context.parameters.enableChunkedUpload.raw || false;
-        this._chunkSize = (this._context.parameters.chunkSizeMB.raw || 10) * 1024 * 1024; // Convert MB to bytes
-
-        const acceptedType = this._context.parameters.acceptedFileTypes.raw || "All";
-        this._acceptedTypes = this._fileTypeMap[acceptedType] || ["*"];
+        // Minimal defaults
+        this._maxFileSize = 1024 * 1024 * 1024; // 1GB
+        this._maxFileCount = 1;
+        this._enableMultiple = false;
+        this._acceptedTypes = [".csv", "text/csv"];
     }
 
     /**
@@ -209,10 +194,6 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
         title.innerHTML = `<span>☁️</span> File Upload`;
         header.appendChild(title);
 
-        const subtitle = document.createElement("p");
-        subtitle.className = "upload-subtitle";
-        subtitle.textContent = this.getUploadHintText();
-        header.appendChild(subtitle);
 
         return header;
     }
@@ -225,7 +206,7 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
         dropZone.className = "drop-zone";
         dropZone.setAttribute("role", "button");
         dropZone.setAttribute("tabindex", "0");
-        dropZone.setAttribute("aria-label", "Drop files here or click to select files");
+        dropZone.setAttribute("aria-label", "Drop file here or click to select files");
 
         const content = document.createElement("div");
         content.className = "drop-zone-content";
@@ -236,7 +217,7 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
 
         const text = document.createElement("div");
         text.className = "drop-zone-text";
-        text.textContent = "Drop files here or click to browse";
+        text.textContent = "Drop file here or click to browse";
 
         const hint = document.createElement("div");
         hint.className = "drop-zone-hint";
@@ -270,15 +251,9 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
         this._uploadAllButton.disabled = true;
         this._uploadAllButton.addEventListener("click", this._boundUploadAllHandler);
 
-        this._cancelAllButton = document.createElement("button");
-        this._cancelAllButton.className = "btn btn-danger";
-        this._cancelAllButton.innerHTML = `<span>✕</span> Cancel All`;
-        this._cancelAllButton.disabled = true;
-        this._cancelAllButton.style.display = "none";
-        this._cancelAllButton.addEventListener("click", this._boundCancelAllHandler);
 
         buttonContainer.appendChild(this._uploadAllButton);
-        buttonContainer.appendChild(this._cancelAllButton);
+        
 
         return buttonContainer;
     }
@@ -566,32 +541,7 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
         this.updateFileItem(fileItem.id);
 
         try {
-            const requestedMode = (this._context.parameters.uploadAuthMode.raw as unknown as string) || "SASFromServer";
-
-            // Defensive override: if direct OneLake inputs are present, prefer direct mode
-            const directFolder = this.getParamRaw<string>("oneLakeFolderUrl") || "";
-            const directToken = this.getParamRaw<string>("aadAccessToken") || "";
-            const hasDirectInputs = !!directFolder && !!directToken;
-
-            const aadTokenUrl = this.getParamRaw<string>("aadTokenRequestUrl") || "";
-            const hasAadIssuer = !!aadTokenUrl;
-
-            const authMode =
-                requestedMode === "OneLakeDirectToken" ? "OneLakeDirectToken" :
-                requestedMode === "OneLakeAAD" && !hasAadIssuer && hasDirectInputs ? "OneLakeDirectToken" :
-                requestedMode;
-
-            if (authMode === "OneLakeAAD") {
-                // Upload to Microsoft OneLake via ADLS Gen2 DFS REST API
-                await this.uploadToOneLake(fileItem);
-            } else if (authMode === "OneLakeDirectToken") {
-                await this.uploadToOneLakeDirect(fileItem);
-            } else {
-                // Get upload URL based on authentication mode (Azure Blob)
-                const uploadUrl = await this.getUploadUrl(fileItem.file);
-                // Perform upload with real progress tracking
-                await this.uploadToAzureStorage(fileItem, uploadUrl);
-            }
+            await this.uploadToOneLakeDirect(fileItem);
 
             // Mark as successful
             fileItem.status = 'success';
@@ -608,75 +558,7 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
         }
     }
 
-    /**
-     * Get upload URL based on authentication mode
-     */
-    private async getUploadUrl(file: File): Promise<string> {
-        const authMode = (this._context.parameters.uploadAuthMode.raw as unknown as string) || "SASFromServer";
-        const storageAccount = this._context.parameters.storageAccountName.raw || "";
-        const containerName = this._context.parameters.containerName.raw || "";
-
-        if (!storageAccount || !containerName) {
-            throw new Error("Storage account name and container name are required");
-        }
-
-        const blobName = this.generateBlobName(file);
-        const blobUrl = `https://${storageAccount}.blob.core.windows.net/${containerName}/${blobName}`;
-
-        let sasToken: string;
-        let uploadEndpoint: string;
-
-        switch (authMode) {
-            case "SASFromServer":
-                return this.getSASUrlFromServer(blobName);
-
-            case "DirectSASToken":
-                sasToken = this.getParamRaw<string>("sasToken") || "";
-                if (!sasToken) {
-                    throw new Error("SAS token is required for DirectSASToken mode");
-                }
-                return `${blobUrl}?${sasToken.startsWith('?') ? sasToken.substring(1) : sasToken}`;
-
-            case "ServerProxyUpload":
-                uploadEndpoint = this.getParamRaw<string>("uploadEndpoint") || "";
-                if (!uploadEndpoint) {
-                    throw new Error("Upload endpoint is required for ServerProxyUpload mode");
-                }
-                return `${uploadEndpoint}?blobName=${encodeURIComponent(blobName)}`;
-
-            default:
-                throw new Error(`Unsupported authentication mode: ${authMode}`);
-        }
-    }
-
-    /**
-     * Get SAS URL from server endpoint
-     */
-    private async getSASUrlFromServer(blobName: string): Promise<string> {
-        const sasRequestUrl = this.getParamRaw<string>("sasRequestUrl") || "";
-        if (!sasRequestUrl) {
-            throw new Error("SAS request URL is required for SASFromServer mode");
-        }
-
-        const url = new URL(sasRequestUrl);
-        url.searchParams.append('blobName', blobName);
-        url.searchParams.append('permission', 'rw');
-        url.searchParams.append('duration', '3600'); // 1 hour
-
-        const response = await fetch(url.toString(), {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`Failed to get SAS token: ${response.status} ${response.statusText}`);
-        }
-
-        const data: SASResponse = await response.json();
-        return data.uploadUrl;
-    }
+    // Removed Azure Blob/SAS helper methods
 
     /**
      * Upload file to Azure Storage with real progress tracking
@@ -721,14 +603,6 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
                 "Content-Type": fileItem.file.type || "application/octet-stream"
             };
 
-            // Add metadata if enabled
-            if (this._context.parameters.enableMetadata.raw) {
-                const metadata = this.generateMetadata(fileItem.file);
-                for (const [key, value] of Object.entries(metadata)) {
-                    const sanitizedKey = this.sanitizeMetadataKey(key);
-                    headers[`x-ms-meta-${sanitizedKey}`] = encodeURIComponent(value);
-                }
-            }
 
             // Open and send request
             xhr.open("PUT", uploadUrl, true);
@@ -745,83 +619,17 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
      * Upload file to Microsoft OneLake (ADLS Gen2 DFS) using AAD Bearer token
      * Flow: create (PUT ?resource=file) -> append (PATCH ?action=append&position=offset)* -> flush (PATCH ?action=flush&position=length)
      */
-    private async uploadToOneLake(fileItem: FileUploadItem): Promise<void> {
-        const accessToken = await this.getOneLakeAccessToken();
-
-        const workspaceId = this.getParamRaw<string>("oneLakeWorkspaceId") || "";
-        const lakehouseId = this.getParamRaw<string>("oneLakeLakehouseId") || "";
-        const basePath = (this.getParamRaw<string>("oneLakeBasePath") || "Files").replace(/^\/+|\/+$/g, "");
-        const userSubPath = this.resolveUserSubPath();
-
-        if (!workspaceId || !lakehouseId) {
-            throw new Error("OneLake workspace ID and lakehouse ID are required for OneLakeAAD mode");
-        }
-
-        const blobName = this.generateBlobName(fileItem.file);
-        const dfsBase = `https://onelake.dfs.fabric.microsoft.com/${workspaceId}/${lakehouseId}`;
-        const filePath = `${basePath}/${userSubPath}/${blobName}`.replace(/\/{2,}/g, "/");
-        const fileUrl = `${dfsBase}/${encodeURI(filePath)}`;
-
-        // 1) Create empty file
-        await this.oneLakeCreateFile(fileUrl, accessToken);
-
-        // 2) Append chunks
-        const chunkSize =
-            (((this.getParamRaw<number>("oneLakeChunkSizeMB") || 8) * 1024 * 1024) >>> 0);
-        const total = fileItem.file.size;
-        let offset = 0;
-
-        while (offset < total) {
-            if (!this._isUploading) {
-                throw new Error("Upload was cancelled");
-            }
-
-            const end = Math.min(offset + chunkSize, total);
-            const chunk = fileItem.file.slice(offset, end);
-            await this.oneLakeAppendChunk(fileUrl, accessToken, offset, chunk);
-
-            offset = end;
-            // coarse progress (per chunk)
-            fileItem.progress = Math.min(99, Math.round((offset / total) * 100));
-            this.updateFileItem(fileItem.id);
-        }
-
-        // 3) Flush
-        await this.oneLakeFlushFile(fileUrl, accessToken, total);
-
-        // Store final path without query
-        fileItem.blobUrl = fileUrl;
-    }
+    // Removed: OneLake AAD multi-part uploader
 
     /**
      * Resolve per-user sub-path. If property provided, use it; otherwise derive a safe default.
      */
-    private resolveUserSubPath(): string {
-        const configured = (this.getParamRaw<string>("oneLakeUserSubPath") || "").trim();
-        if (configured) {
-            return configured.replace(/^\/+|\/+$/g, "");
-        }
-
-        // Derive from current user if available, else 'anonymous'
-        // Note: availability of user info varies between Canvas and Model-driven apps.
-        // Fallback is a stable 'anonymous' bucket.
-        const userSettings = (this._context as unknown as { userSettings?: { userName?: string; userId?: string } }).userSettings;
-        const userName = (userSettings && (userSettings.userName || userSettings.userId)) || "anonymous";
-
-        return this.sanitizePathSegment(String(userName));
-    }
+    // Removed: per-user subpath
 
     /**
      * Sanitize a path segment for OneLake/DFS URLs
      */
-    private sanitizePathSegment(segment: string): string {
-        return segment
-            .toLowerCase()
-            .trim()
-            .replace(/[^a-z0-9-_./]/g, "-")
-            .replace(/\/{2,}/g, "/")
-            .replace(/^\/+|\/+$/g, "");
-    }
+    // Removed: sanitization for per-user path
 
     /**
      * Create an empty file in OneLake (DFS)
@@ -864,6 +672,41 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
     }
 
     /**
+     * Single append sending the full file with progress via XHR
+     */
+    private async oneLakeAppendFullWithProgress(fileUrl: string, accessToken: string, fileItem: FileUploadItem): Promise<void> {
+        await new Promise<void>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            fileItem.xhr = xhr;
+
+            xhr.upload.addEventListener("progress", (e) => {
+                if (e.lengthComputable) {
+                    fileItem.progress = Math.round((e.loaded / e.total) * 100);
+                    this.updateFileItem(fileItem.id);
+                }
+            });
+
+            xhr.addEventListener("load", () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    resolve();
+                } else {
+                    const errorText = xhr.responseText || `HTTP ${xhr.status}`;
+                    reject(new Error(`OneLake append failed: ${errorText}`));
+                }
+            });
+            xhr.addEventListener("error", () => reject(new Error("Network error during OneLake append")));
+            xhr.addEventListener("abort", () => reject(new Error("Upload was cancelled")));
+
+            const url = `${fileUrl}?action=append&position=0`;
+            xhr.open("PATCH", url, true);
+            xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
+            xhr.setRequestHeader("x-ms-version", "2023-11-03");
+            xhr.setRequestHeader("Content-Type", fileItem.file.type || "text/csv");
+            xhr.send(fileItem.file);
+        });
+    }
+
+    /**
      * Flush the OneLake file after all data appended
      */
     private async oneLakeFlushFile(fileUrl: string, accessToken: string, totalLength: number): Promise<void> {
@@ -882,49 +725,7 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
         }
     }
 
-    // ===== OneLake Token Handling =====
-
-    private _oneLakeTokenCache?: { token: string; expires: number };
-
-    /**
-     * Acquire OneLake (ADLS Gen2) access token from server. Cache until close to expiry.
-     * Expected server response: { accessToken: string, expiresAt: string }
-     */
-    private async getOneLakeAccessToken(): Promise<string> {
-        const now = Date.now();
-        if (this._oneLakeTokenCache && this._oneLakeTokenCache.expires - 120000 > now) {
-            return this._oneLakeTokenCache.token;
-        }
-
-        const tokenUrl = this.getParamRaw<string>("aadTokenRequestUrl") || "";
-        if (!tokenUrl) {
-            throw new Error("AAD Token Request URL is required for OneLakeAAD mode");
-        }
-
-        const resp = await fetch(tokenUrl, {
-            method: "GET",
-            headers: { "Accept": "application/json" }
-        });
-        if (!resp.ok) {
-            throw new Error(`Failed to acquire OneLake token: ${resp.status} ${resp.statusText}`);
-        }
-        const data = await resp.json() as { accessToken?: string; expiresAt?: string; expires_in?: number };
-        const token = data.accessToken;
-        if (!token) {
-            throw new Error("Invalid token response from server");
-        }
-
-        let expires = now + 55 * 60 * 1000; // default 55m
-        if (data.expiresAt) {
-            const t = Date.parse(data.expiresAt);
-            if (!isNaN(t)) expires = t;
-        } else if (typeof data.expires_in === "number") {
-            expires = now + (data.expires_in * 1000);
-        }
-
-        this._oneLakeTokenCache = { token, expires };
-        return token;
-    }
+    // Removed: token handling cache / acquisition
 
     /**
      * OneLake direct-token mode: caller provides folder URL and bearer token.
@@ -946,37 +747,18 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
         const fileName = this.generateBlobName(fileItem.file);
         const fileUrl = `${folderUrl}/${encodeURIComponent(fileName)}`;
 
-        // Create -> Append chunks -> Flush
+        // Create -> Single append -> Flush
         await this.oneLakeCreateFile(fileUrl, bearerToken);
-
-        const chunkSize = (((this.getParamRaw<number>("oneLakeChunkSizeMB") || 8) * 1024 * 1024) >>> 0);
-        const total = fileItem.file.size;
-        let offset = 0;
-
-        while (offset < total) {
-            if (!this._isUploading) {
-                throw new Error("Upload was cancelled");
-            }
-            const end = Math.min(offset + chunkSize, total);
-            const chunk = fileItem.file.slice(offset, end);
-            await this.oneLakeAppendChunk(fileUrl, bearerToken, offset, chunk);
-            offset = end;
-            fileItem.progress = Math.min(99, Math.round((offset / total) * 100));
-            this.updateFileItem(fileItem.id);
-        }
-
-        await this.oneLakeFlushFile(fileUrl, bearerToken, total);
+        await this.oneLakeAppendFullWithProgress(fileUrl, bearerToken, fileItem);
+        await this.oneLakeFlushFile(fileUrl, bearerToken, fileItem.file.size);
         fileItem.blobUrl = fileUrl;
     }
     /**
      * Generate unique blob name
      */
     private generateBlobName(file: File): string {
-        const timestamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
-        const guid = this.generateGuid().slice(0, 8);
-        const extension = file.name.includes('.') ? file.name.split('.').pop() : '';
-
-        return `${file.name.replace(/\.[^/.]+$/, "")}_${timestamp}_${guid}.${extension}`;
+        // Preserve original file name (no renaming)
+        return file.name;
     }
 
     /**
@@ -1091,8 +873,6 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
         const uploadingFiles = Array.from(this._files.values()).filter(f => f.status === 'uploading');
 
         this._uploadAllButton.disabled = pendingFiles.length === 0 || this._isUploading;
-        this._cancelAllButton.disabled = uploadingFiles.length === 0;
-        this._cancelAllButton.style.display = this._isUploading ? "inline-flex" : "none";
     }
 
     /**
@@ -1242,12 +1022,12 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
         if (acceptedType === "All") {
             return "All file types allowed";
         }
-        return `Accepted: ${acceptedType} files (Max: ${this.formatFileSize(this._maxFileSize)})`;
+        return `Accepted: ${acceptedType} file (Max: ${this.formatFileSize(this._maxFileSize)})`;
     }
 
     private getUploadHintText(): string {
         const multipleText = this._enableMultiple ? ` up to ${this._maxFileCount} files` : " a single file";
-        return `Upload${multipleText} to Azure Blob Storage`;
+        return `Upload`;
     }
 
     /**
