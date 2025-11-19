@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "r2KHwP3e8co=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\Aateefuddin\\Documents\\mahfooz\\Solution\\UploadFile\\UploadFile.cdsproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Aateefuddin\\.nuget\\packages\\microsoft.netframework.referenceassemblies\\1.0.0\\microsoft.netframework.referenceassemblies.1.0.0.nupkg.sha512",
+    "C:\\Users\\Aateefuddin\\.nuget\\packages\\microsoft.netframework.referenceassemblies.net462\\1.0.0\\microsoft.netframework.referenceassemblies.net462.1.0.0.nupkg.sha512",
+    "C:\\Users\\Aateefuddin\\.nuget\\packages\\microsoft.powerapps.msbuild.pcf\\1.50.1\\microsoft.powerapps.msbuild.pcf.1.50.1.nupkg.sha512",
+    "C:\\Users\\Aateefuddin\\.nuget\\packages\\microsoft.powerapps.msbuild.solution\\1.50.1\\microsoft.powerapps.msbuild.solution.1.50.1.nupkg.sha512"
+  ],
+  "logs": []
+}

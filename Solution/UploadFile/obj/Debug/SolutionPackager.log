@@ -1,0 +1,21 @@
+2025-11-19 18:57:54.976 - Info	
+Packing C:\Users\Aateefuddin\Documents\mahfooz\Solution\UploadFile\obj\Debug\Metadata to bin\Debug\UploadFile.zip
+
+2025-11-19 18:57:54.996 - Info	Processing Component: Entities
+2025-11-19 18:57:55.001 - Info	Processing Component: Roles
+2025-11-19 18:57:55.005 - Info	Processing Component: Workflows
+2025-11-19 18:57:55.005 - Info	Processing Component: FieldSecurityProfiles
+2025-11-19 18:57:55.005 - Info	Processing Component: Templates
+2025-11-19 18:57:55.007 - Info	Processing Component: EntityMaps
+2025-11-19 18:57:55.007 - Info	Processing Component: EntityRelationships
+2025-11-19 18:57:55.007 - Info	Processing Component: OrganizationSettings
+2025-11-19 18:57:55.008 - Info	Processing Component: optionsets
+2025-11-19 18:57:55.008 - Info	Processing Component: CustomControls
+2025-11-19 18:57:55.020 - Info	 - pcfFile.customFileUpload
+2025-11-19 18:57:55.053 - Info	Processing Component: EntityDataProviders
+2025-11-19 18:57:55.053 - Info	Processing Component: CanvasApps
+2025-11-19 18:57:55.060 - Info	 - magic_newblobtest_4cf86
+2025-11-19 18:57:55.078 - Info	Processing Sharded Component Files
+2025-11-19 18:57:55.106 - Info	
+Unmanaged Pack complete.
+
