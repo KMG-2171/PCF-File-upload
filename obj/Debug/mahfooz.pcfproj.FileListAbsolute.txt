@@ -1,0 +1,2 @@
+C:\Users\Aateefuddin\Documents\mahfooz\obj\Debug\mahfooz.pcfproj.AssemblyReference.cache
+C:\Users\Aateefuddin\Documents\mahfooz\obj\Debug\mahfooz.pcfproj.CoreCompileInputs.cache
