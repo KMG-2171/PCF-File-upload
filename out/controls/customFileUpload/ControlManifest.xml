@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <manifest>
-  <control namespace="pcfFile" constructor="customFileUpload" version="0.1.10" display-name-key="PCF OneLake" description-key="PCF" control-type="standard" api-version="1.3.18">
+  <control namespace="pcfFile" constructor="customFileUpload" version="0.1.17" display-name-key="PCF OneLake" description-key="PCF" control-type="standard" api-version="1.3.18">
     <external-service-usage enabled="true">
       <domain>onelake.dfs.fabric.microsoft.com</domain>
     </external-service-usage>
