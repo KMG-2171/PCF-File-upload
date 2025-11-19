@@ -130,7 +130,13 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
         this._maxFileSize = 1024 * 1024 * 1024; // 1GB
         this._maxFileCount = 1;
         this._enableMultiple = false;
-        this._acceptedTypes = [".csv", "text/csv"];
+        const acceptedType = this.getParamRaw<string>("acceptedFileTypes") || "All";
+        if (acceptedType === "All") {
+            this._acceptedTypes = ["*"];
+        } else {
+            // Default to CSV if not All
+            this._acceptedTypes = [".csv", "text/csv"];
+        }
     }
 
     /**
@@ -244,17 +250,8 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
     private createActionButtons(): HTMLDivElement {
         const buttonContainer = document.createElement("div");
         buttonContainer.className = "button-container";
-
-        this._uploadAllButton = document.createElement("button");
-        this._uploadAllButton.className = "btn btn-primary";
-        this._uploadAllButton.innerHTML = `<span>☁️</span> Upload`;
-        this._uploadAllButton.disabled = true;
-        this._uploadAllButton.addEventListener("click", this._boundUploadAllHandler);
-
-
-        buttonContainer.appendChild(this._uploadAllButton);
-        
-
+        // Direct upload mode: no manual buttons needed
+        buttonContainer.style.display = "none";
         return buttonContainer;
     }
 
@@ -333,6 +330,8 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
                     retryCount: 0
                 };
                 this._files.set(fileId, fileItem);
+                // Start upload immediately for direct upload experience
+                this.uploadFile(fileItem).catch(() => { /* error handled inside uploadFile */ });
                 addedCount++;
             }
         }
@@ -340,7 +339,7 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
         if (addedCount > 0) {
             this.updateFileList();
             this.updateActionButtons();
-            this.showNotification(`Added ${addedCount} file${addedCount > 1 ? 's' : ''} to upload queue.`, "success");
+            this.showNotification(`Uploading ${addedCount} file${addedCount > 1 ? 's' : ''}...`, "success");
         }
     }
 
@@ -560,60 +559,7 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
 
     // Removed Azure Blob/SAS helper methods
 
-    /**
-     * Upload file to Azure Storage with real progress tracking
-     */
-    private async uploadToAzureStorage(fileItem: FileUploadItem, uploadUrl: string): Promise<void> {
-        return new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            fileItem.xhr = xhr;
-
-            // Progress tracking
-            xhr.upload.addEventListener("progress", (e) => {
-                if (e.lengthComputable) {
-                    fileItem.progress = Math.round((e.loaded / e.total) * 100);
-                    this.updateFileItem(fileItem.id);
-                }
-            });
-
-            // Completion
-            xhr.addEventListener("load", () => {
-                if (xhr.status >= 200 && xhr.status < 300) {
-                    fileItem.blobUrl = uploadUrl.split('?')[0]; // Remove SAS token for storage
-                    resolve();
-                } else {
-                    const errorText = xhr.responseText || `HTTP ${xhr.status}`;
-                    reject(new Error(`Upload failed: ${errorText}`));
-                }
-            });
-
-            // Error handling
-            xhr.addEventListener("error", () => {
-                reject(new Error("Network error during upload"));
-            });
-
-            xhr.addEventListener("abort", () => {
-                reject(new Error("Upload was cancelled"));
-            });
-
-            // Prepare headers
-            const headers: Record<string, string> = {
-                "x-ms-blob-type": "BlockBlob",
-                "x-ms-version": "2024-11-04",
-                "Content-Type": fileItem.file.type || "application/octet-stream"
-            };
-
-
-            // Open and send request
-            xhr.open("PUT", uploadUrl, true);
-
-            for (const [key, value] of Object.entries(headers)) {
-                xhr.setRequestHeader(key, value);
-            }
-
-            xhr.send(fileItem.file);
-        });
-    }
+    // Removed: Azure Blob SAS upload helper (unused)
 
     /**
      * Upload file to Microsoft OneLake (ADLS Gen2 DFS) using AAD Bearer token
@@ -650,26 +596,7 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
         }
     }
 
-    /**
-     * Append a chunk to the OneLake file
-     */
-    private async oneLakeAppendChunk(fileUrl: string, accessToken: string, position: number, chunk: Blob): Promise<void> {
-        const url = `${fileUrl}?action=append&position=${position}`;
-        const resp = await fetch(url, {
-            method: "PATCH",
-            headers: {
-                "Authorization": `Bearer ${accessToken}`,
-                "x-ms-version": "2023-11-03",
-                "Content-Type": "application/octet-stream",
-                // Content-Length is set automatically by browser for fetch with Blob
-            } as Record<string, string>,
-            body: chunk
-        });
-        if (!resp.ok) {
-            const text = await resp.text();
-            throw new Error(`OneLake append failed at ${position}: ${resp.status} ${resp.statusText} - ${text}`);
-        }
-    }
+    // Removed: OneLake chunk append helper (unused with single-append approach)
 
     /**
      * Single append sending the full file with progress via XHR
@@ -678,6 +605,9 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
         await new Promise<void>((resolve, reject) => {
             const xhr = new XMLHttpRequest();
             fileItem.xhr = xhr;
+
+            // Generous timeout for large files (15 minutes)
+            xhr.timeout = 15 * 60 * 1000;
 
             xhr.upload.addEventListener("progress", (e) => {
                 if (e.lengthComputable) {
@@ -696,12 +626,13 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
             });
             xhr.addEventListener("error", () => reject(new Error("Network error during OneLake append")));
             xhr.addEventListener("abort", () => reject(new Error("Upload was cancelled")));
+            xhr.addEventListener("timeout", () => reject(new Error("Upload timed out")));
 
             const url = `${fileUrl}?action=append&position=0`;
             xhr.open("PATCH", url, true);
             xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
             xhr.setRequestHeader("x-ms-version", "2023-11-03");
-            xhr.setRequestHeader("Content-Type", fileItem.file.type || "text/csv");
+            xhr.setRequestHeader("Content-Type", fileItem.file.type || "application/octet-stream");
             xhr.send(fileItem.file);
         });
     }
@@ -757,43 +688,31 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
      * Generate unique blob name
      */
     private generateBlobName(file: File): string {
-        // Preserve original file name (no renaming)
-        return file.name;
+        const originalName = file.name;
+        const lastDotIndex = originalName.lastIndexOf(".");
+        const baseName = lastDotIndex > 0 ? originalName.substring(0, lastDotIndex) : originalName;
+        const extension = lastDotIndex > 0 ? originalName.substring(lastDotIndex) : "";
+        const ts = this.getTimestampYmdHms();
+        return `${baseName}_input_${ts}${extension}`;
     }
 
     /**
-     * Sanitize metadata key for HTTP header compatibility
+     * Return timestamp string yyyymmdd_hhmmss
      */
-    private sanitizeMetadataKey(key: string): string {
-        // Remove invalid characters and ensure it starts with a letter
-        return key
-            .replace(/[^a-zA-Z0-9-_]/g, '') // Keep only alphanumeric, dash, underscore
-            .replace(/^[^a-zA-Z]/, 'X') // Ensure starts with letter
-            .substring(0, 64); // Limit length
-    }
-
-    /**
-     * Generate metadata for file
-     */
-    private generateMetadata(file: File): Record<string, string> {
-        const metadata: Record<string, string> = {};
-
-        // Use safe, hardcoded metadata property names to avoid header issues
-        const userNameProperty = "UploadedBy";
-        const timestampProperty = "UploadedAt";
-        const emailProperty = "UserEmail";
-
-        metadata["OriginalFileName"] = file.name;
-        metadata["FileSize"] = file.size.toString();
-        metadata["ContentType"] = file.type || "application/octet-stream";
-        metadata[userNameProperty] = "PCF User"; // Can be enhanced with actual user info
-        // time stamp should be in mmmddyyyy hh:mm:ss format
+    private getTimestampYmdHms(): string {
         const now = new Date();
-        metadata[timestampProperty]= `${now.getMonth()+1}/${now.getDate()}/${now.getFullYear()} ${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
-        metadata[emailProperty] = "user@example.com"; // Can be enhanced with actual user email
-
-        return metadata;
+        const yyyy = now.getFullYear().toString().padStart(4, "0");
+        const mm = (now.getMonth() + 1).toString().padStart(2, "0");
+        const dd = now.getDate().toString().padStart(2, "0");
+        const hh = now.getHours().toString().padStart(2, "0");
+        const mi = now.getMinutes().toString().padStart(2, "0");
+        const ss = now.getSeconds().toString().padStart(2, "0");
+        return `${yyyy}${mm}${dd}_${hh}${mi}${ss}`;
     }
+
+    // Removed: metadata header key sanitizer (metadata not used)
+
+    // Removed: metadata generator (not used in direct upload)
 
     /**
      * Handle cancel all action
@@ -869,9 +788,9 @@ export class customFileUpload implements ComponentFramework.StandardControl<IInp
      * Update action buttons state
      */
     private updateActionButtons(): void {
+        // No action buttons in direct upload mode
+        if (!this._uploadAllButton) return;
         const pendingFiles = Array.from(this._files.values()).filter(f => f.status === 'pending');
-        const uploadingFiles = Array.from(this._files.values()).filter(f => f.status === 'uploading');
-
         this._uploadAllButton.disabled = pendingFiles.length === 0 || this._isUploading;
     }
 
